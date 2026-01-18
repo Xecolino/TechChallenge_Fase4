@@ -2,6 +2,8 @@ import streamlit as st
 import pandas as pd
 import joblib
 import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
+import matplotlib.ticker as mticker
 import os
 from datetime import datetime, timedelta
 
@@ -19,24 +21,18 @@ st.markdown("""
 """)
 
 # --- 2. Carregamento do Modelo e Dados Históricos ---
-@st.cache_resource # <--- COMENTE ESTA LINHA TEMPORARIAMENTE PARA DEBUGAR O CACHE
+@st.cache_resource
 def load_model(model_path):
     """Carrega o modelo treinado."""
-    # Verifica se o arquivo existe antes de tentar carregar
     if not os.path.exists(model_path):
         st.error(f"Erro: O arquivo do modelo '{model_path}' não foi encontrado. "
                  "Certifique-se de que o arquivo 'forest.joblib' está no mesmo diretório do 'app.py'.")
-        st.stop() # Interrompe a execução do Streamlit
-        return None # Retorna None para indicar falha
+        st.stop()
+        return None
 
     try:
-        # Tenta carregar o objeto do arquivo
         raw_loaded_object = joblib.load(model_path)
         
-        # --- DEBUGGING CRÍTICO: Mostra o tipo do objeto carregado ---
-        # st.write(f"DEBUG: Tipo do objeto carregado por joblib.load('{model_path}'): **{type(raw_loaded_object)}**")
-        
-        # Verifica se o objeto carregado é uma string (o que não deveria ser para um modelo)
         if isinstance(raw_loaded_object, str):
             st.error(f"Erro: O arquivo '{model_path}' foi carregado como uma **string** em vez de um modelo. "
                      "Isso geralmente indica que o arquivo está corrompido ou não foi salvo corretamente "
@@ -45,7 +41,6 @@ def load_model(model_path):
             st.stop()
             return None
         
-        # Se chegou aqui, assumimos que é um modelo válido
         model = raw_loaded_object
         st.success(f"Modelo '{model_path}' carregado com sucesso. Tipo esperado: {type(model)}")
         return model
@@ -55,11 +50,11 @@ def load_model(model_path):
         st.stop()
         return None
 
-@st.cache_data # Cacheia o carregamento dos dados para performance
+@st.cache_data
 def load_historical_data(file_path):
     """Carrega e pré-processa os dados históricos do IBOVESPA."""
     try:
-        df = pd.read_csv(file_path, sep=',') # Ajuste sep para ',' conforme sua correção
+        df = pd.read_csv(file_path, sep=',')
         
         df.columns = df.columns.str.strip()
         
@@ -141,12 +136,11 @@ def save_log(data, filename='prediction_log.csv'):
 # Caminhos dos arquivos
 MODEL_PATH = 'forest.joblib'
 DATA_PATH = 'Dados Históricos - Ibovespa.csv'
+CM_IMAGE_PATH = 'confusion_matrix.png'
+FI_IMAGE_PATH = 'feature_importance.png' # Novo caminho para a imagem de importância das features
 
 model = load_model(MODEL_PATH)
 historical_df = load_historical_data(DATA_PATH)
-
-# --- REMOVENDO A LINHA REDUNDANTE, POIS JÁ TEMOS O DEBUG DENTRO DE load_model ---
-# st.write(f"Tipo da variável 'model' global após load_model: {type(model)}")
 
 if model is None or historical_df is None:
     st.error("A aplicação não pode iniciar devido a erros no carregamento do modelo ou dados históricos. Por favor, verifique os logs acima.")
@@ -155,12 +149,42 @@ if model is None or historical_df is None:
 # --- 3. Painel de Métricas de Validação do Modelo ---
 st.header("📊 Performance do Modelo")
 st.info(f"**Modelo Utilizado:** Random Forest Classifier")
-st.metric(label="Acurácia de Validação", value="80.00%") # Acurácia reportada por você
-
+st.metric(label="Acurácia de Validação", value="80.00%")
 st.markdown("""
     > *Lembre-se: Esta acurácia foi obtida durante a fase de treinamento e validação em um conjunto de teste 
     apresentado no Tech Challenge 02.*
 """)
+
+# --- Adicionar Matriz de Confusão ---
+st.subheader("Matriz de Confusão")
+st.markdown("""
+    A matriz de confusão é uma ferramenta essencial para avaliar a performance de um modelo de classificação.
+    Ela mostra o número de previsões corretas e incorretas, categorizadas por classe.
+""")
+
+if os.path.exists(CM_IMAGE_PATH):
+    st.image(CM_IMAGE_PATH, caption='Matriz de Confusão do Modelo (Conjunto de Teste)', use_column_width=True)
+    st.markdown("""
+        - **Verdadeiro Negativo (TN):** Previsões corretas de "Baixa (0)". O modelo previu baixa e o IBOVESPA realmente caiu.
+        - **Falso Positivo (FP):** Previsões incorretas de "Alta (1)". O modelo previu alta, mas o IBOVESPA caiu (Erro Tipo I).
+        - **Falso Negativo (FN):** Previsões incorretas de "Baixa (0)". O modelo previu baixa, mas o IBOVESPA subiu (Erro Tipo II).
+        - **Verdadeiro Positivo (TP):** Previsões corretas de "Alta (1)". O modelo previu alta e o IBOVESPA realmente subiu.
+    """)
+else:
+    st.warning("Arquivo 'confusion_matrix.png' não encontrado. Por favor, execute o script de treinamento (`save_model.py`) para gerá-lo.")
+
+# --- Adicionar Gráfico de Importância das Features ---
+st.subheader("Importância das Features")
+st.markdown("""
+    Este gráfico mostra quais atributos (features) foram mais relevantes para o modelo Random Forest
+    ao tomar suas decisões de previsão. Features com maior importância contribuíram mais para a redução
+    da impureza nas árvores de decisão.
+""")
+if os.path.exists(FI_IMAGE_PATH):
+    st.image(FI_IMAGE_PATH, caption='Importância das Features', use_column_width=True)
+else:
+    st.warning("Arquivo 'feature_importance.png' não encontrado. Por favor, execute o script de treinamento (`save_model.py`) para gerá-lo.")
+
 
 # --- 4. Interface Interativa para Previsão ---
 st.header("🔮 Faça sua Previsão")
@@ -284,8 +308,6 @@ if st.button("Gerar Previsão para o Dia Seguinte"):
     ])
 
     try:
-        # Agora, se 'model' for None (devido a um erro no carregamento), esta linha vai falhar
-        # e o 'st.exception(e)' vai capturar e mostrar o erro de 'NoneType'
         prediction = model.predict(features_for_prediction)[0]
         prediction_proba = model.predict_proba(features_for_prediction)[0]
 
@@ -294,6 +316,13 @@ if st.button("Gerar Previsão para o Dia Seguinte"):
             st.success(f"⬆️ **ALTA** (Probabilidade: {prediction_proba[1]*100:.2f}%)")
         else:
             st.error(f"⬇️ **BAIXA** (Probabilidade: {prediction_proba[0]*100:.2f}%)")
+        
+        st.info(f"""
+            O modelo de Machine Learning utilizado prevê a **tendência** (alta ou baixa) do IBOVESPA,
+            e não um valor numérico exato para o índice do dia seguinte.
+            Para referência, o valor de abertura que você inseriu para hoje é **{input_abertura_hoje:.2f}**.
+            A previsão de um valor numérico específico exigiria um modelo de regressão.
+        """)
 
         log_data = {
             'timestamp': datetime.now().isoformat(),
@@ -313,18 +342,21 @@ if st.button("Gerar Previsão para o Dia Seguinte"):
 
     except Exception as e:
         st.error(f"Erro ao gerar a previsão. Verifique se as features de entrada correspondem ao que o modelo espera ou se o modelo foi carregado corretamente: {e}")
-        st.exception(e) # Para depuração
+        st.exception(e)
 
 # --- 5. Gráfico Interativo para Análises Temporais e Previsão ---
-st.header("📈 Análise Temporal do IBOVESPA")
-st.markdown("Visualize o histórico do IBOVESPA e o ponto de previsão. O ponto vermelho indica o valor de 'Abertura (Hoje)' que você inseriu.")
+st.header("📈 Análise Temporal do IBOVESPA (Último Mês)")
+st.markdown("Visualize o histórico do IBOVESPA do último mês e o ponto de previsão. O ponto vermelho indica o valor de 'Abertura (Hoje)' que você inseriu.")
 
 if not historical_df.empty:
-    fig, ax = plt.subplots(figsize=(12, 6))
-    ax.plot(historical_df['data'], historical_df['ultimo'], label='Preço de Fechamento (Último)', color='blue', alpha=0.7)
+    last_date_in_data = historical_df['data'].max()
+    start_date_for_plot = last_date_in_data - pd.Timedelta(days=30)
+    filtered_df = historical_df[historical_df['data'] >= start_date_for_plot].copy()
 
-    last_historical_date = historical_df['data'].max()
-    next_prediction_date = last_historical_date + pd.Timedelta(days=1)
+    fig, ax = plt.subplots(figsize=(12, 6))
+    ax.plot(filtered_df['data'], filtered_df['ultimo'], label='Preço de Fechamento (Último)', color='darkgray', alpha=0.7)
+
+    next_prediction_date = last_date_in_data + pd.Timedelta(days=1)
 
     ax.scatter(next_prediction_date, input_abertura_hoje, color='red', s=150, zorder=5, label='Abertura Inserida (Hoje)', marker='X')
     ax.annotate(
@@ -342,6 +374,13 @@ if not historical_df.empty:
     ax.set_ylabel('Preço')
     ax.legend()
     ax.grid(True)
+    
+    ax.set_ylim(bottom=0, top=200000)
+    ax.yaxis.set_major_locator(mticker.MultipleLocator(10000))
+    ax.ticklabel_format(style='plain', axis='y')
+
+    ax.xaxis.set_major_locator(mdates.DayLocator(interval=5))
+    ax.xaxis.set_major_formatter(mdates.DateFormatter('%d/%m'))
     plt.xticks(rotation=45)
     plt.tight_layout()
     st.pyplot(fig)
