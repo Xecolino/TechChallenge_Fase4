@@ -317,13 +317,7 @@ if st.button("Gerar Previsão para o Dia Seguinte"):
         else:
             st.error(f"⬇️ **BAIXA** (Probabilidade: {prediction_proba[0]*100:.2f}%)")
         
-        st.info(f"""
-            O modelo de Machine Learning utilizado prevê a **tendência** (alta ou baixa) do IBOVESPA,
-            e não um valor numérico exato para o índice do dia seguinte.
-            Para referência, o valor de abertura que você inseriu para hoje é **{input_abertura_hoje:.2f}**.
-            A previsão de um valor numérico específico exigiria um modelo de regressão.
-        """)
-
+        
         log_data = {
             'timestamp': datetime.now().isoformat(),
             'input_abertura_hoje': input_abertura_hoje,
@@ -354,7 +348,7 @@ if not historical_df.empty:
     filtered_df = historical_df[historical_df['data'] >= start_date_for_plot].copy()
 
     fig, ax = plt.subplots(figsize=(12, 6))
-    ax.plot(filtered_df['data'], filtered_df['ultimo'], label='Preço de Fechamento (Último)', color='darkgray', alpha=0.7)
+    ax.plot(filtered_df['data'], filtered_df['ultimo'], label='Preço de Fechamento (Último)', color='blue', alpha=0.7)
 
     next_prediction_date = last_date_in_data + pd.Timedelta(days=1)
 
@@ -397,3 +391,4 @@ st.sidebar.markdown("---")
 st.sidebar.markdown("Desenvolvido por Alexandre da Silva Oliveira, Carlos Alexandre da Silveira de Souza, Christina Melo Pereira, Daniele dos Santos Ferreira, Marlon Monteiro Militani" )
 st.sidebar.markdown("---")
 st.sidebar.markdown("⚠️ **Atenção:** Verifique a consistência dos dados de entrada, especialmente os valores de preço (Abertura, Máxima, Mínima, Último), pois inconsistências na escala podem afetar a precisão do modelo.")
+
